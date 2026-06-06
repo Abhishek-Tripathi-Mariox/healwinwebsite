@@ -1,0 +1,93 @@
+.App {
+  min-height: 100vh;
+}
+
+/* Smooth page transitions */
+main {
+  animation: pageIn 0.4s ease-out;
+}
+
+/* Global text alignment across the full app */
+.App h1,
+.App h2,
+.App h3,
+.App h4,
+.App h5,
+.App h6 {
+  text-align: center !important;
+}
+
+.App p {
+  text-align: justify !important;
+  text-justify: inter-word;
+}
+
+/* Career listing cards: keep job title left-aligned */
+.App h3.career-job-title {
+  text-align: left !important;
+}
+
+/* Global size boost for section pill badges (e.g., All Services, Why HealWin) */
+.App .inline-flex.items-center.gap-2.px-5.py-2.rounded-full.text-sm.font-medium {
+  font-size: 1.125rem !important;
+  line-height: 1.75rem !important;
+}
+
+.App
+  .inline-flex.items-center.gap-2.px-5.py-2.rounded-full.text-sm.font-medium
+  svg {
+  width: 1.125rem !important;
+  height: 1.125rem !important;
+}
+
+@keyframes pageIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Link styling */
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Line clamp utilities */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Prose styling */
+.prose {
+  max-width: 65ch;
+}
+
+.prose p {
+  margin-bottom: 1.5em;
+}
+
+.prose h2 {
+  margin-top: 2em;
+  margin-bottom: 1em;
+}
+
+/* Selection styling */
+::selection {
+  background-color: rgba(37, 99, 235, 0.2);
+  color: #0f172a;
+}
