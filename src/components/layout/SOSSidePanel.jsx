@@ -65,6 +65,7 @@ const SOSSidePanel = () => {
     numberOfPeople: 1,
     address: "",
   });
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const resetForms = () => {
     setSosForm({
@@ -76,9 +77,48 @@ const SOSSidePanel = () => {
       numberOfPeople: 1,
       address: "",
     });
+    setFieldErrors({});
     setError(null);
     setSuccess(null);
   };
+
+  // Update a field + clear its inline error as the user types.
+  const setField = (key, value) => {
+    setSosForm((f) => ({ ...f, [key]: value }));
+    setFieldErrors((e) => (e[key] ? { ...e, [key]: undefined } : e));
+  };
+
+  // Validate name / phone / email / emergency type before submitting.
+  const validateForm = () => {
+    const errs = {};
+    const name = (sosForm.name || "").trim();
+    const phone = (sosForm.phone || "").trim();
+    const email = (sosForm.email || "").trim();
+    const people = Number(sosForm.numberOfPeople);
+
+    if (!name) errs.name = "Name is required.";
+    else if (name.length < 2) errs.name = "Please enter a valid name.";
+
+    if (!phone) errs.phone = "Phone number is required.";
+    else if (!/^[6-9]\d{9}$/.test(phone))
+      errs.phone = "Enter a valid 10-digit mobile number (starting 6–9).";
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      errs.email = "Enter a valid email address.";
+
+    if (!sosForm.emergencyType) errs.emergencyType = "Please select an emergency type.";
+
+    if (sosForm.numberOfPeople !== "" && (!Number.isFinite(people) || people < 1))
+      errs.numberOfPeople = "Must be at least 1.";
+
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const errInputCls = (key) =>
+    fieldErrors[key]
+      ? "border-red-400 focus:ring-red-200 focus:border-red-400"
+      : "border-gray-200 focus:ring-hw-primary/30 focus:border-hw-primary";
 
   const closeModal = () => {
     setActiveModal(null);
@@ -230,10 +270,8 @@ const SOSSidePanel = () => {
   // Handle SOS Form
   const handleFormSubmit = async (e) => {
     e.preventDefault();
-    if (!/^[6-9]\d{9}$/.test((sosForm.phone || "").trim())) {
-      setError("Please enter a valid 10-digit mobile number (starting 6-9).");
-      return;
-    }
+    setError(null);
+    if (!validateForm()) return;
     setLoading(true);
     setError(null);
     try {
@@ -622,14 +660,14 @@ const SOSSidePanel = () => {
                           </label>
                           <input
                             type="text"
-                            required
                             value={sosForm.name}
-                            onChange={(e) =>
-                              setSosForm({ ...sosForm, name: e.target.value })
-                            }
-                            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hw-primary/30 focus:border-hw-primary outline-none text-sm"
+                            onChange={(e) => setField("name", e.target.value)}
+                            className={`w-full px-3 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm ${errInputCls("name")}`}
                             placeholder="Your name"
                           />
+                          {fieldErrors.name && (
+                            <p className="mt-1 text-xs text-red-500">{fieldErrors.name}</p>
+                          )}
                         </div>
                         <div>
                           <label className="block mb-1 text-sm font-medium text-gray-700">
@@ -639,19 +677,19 @@ const SOSSidePanel = () => {
                             type="tel"
                             inputMode="numeric"
                             maxLength={10}
-                            required
                             value={sosForm.phone}
                             onChange={(e) =>
-                              setSosForm({
-                                ...sosForm,
-                                phone: e.target.value
-                                  .replace(/\D/g, "")
-                                  .slice(0, 10),
-                              })
+                              setField(
+                                "phone",
+                                e.target.value.replace(/\D/g, "").slice(0, 10),
+                              )
                             }
-                            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hw-primary/30 focus:border-hw-primary outline-none text-sm"
+                            className={`w-full px-3 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm ${errInputCls("phone")}`}
                             placeholder="10-digit mobile number"
                           />
+                          {fieldErrors.phone && (
+                            <p className="mt-1 text-xs text-red-500">{fieldErrors.phone}</p>
+                          )}
                         </div>
                       </div>
 
@@ -662,12 +700,13 @@ const SOSSidePanel = () => {
                         <input
                           type="email"
                           value={sosForm.email}
-                          onChange={(e) =>
-                            setSosForm({ ...sosForm, email: e.target.value })
-                          }
-                          className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hw-primary/30 focus:border-hw-primary outline-none text-sm"
+                          onChange={(e) => setField("email", e.target.value)}
+                          className={`w-full px-3 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm ${errInputCls("email")}`}
                           placeholder="your@email.com"
                         />
+                        {fieldErrors.email && (
+                          <p className="mt-1 text-xs text-red-500">{fieldErrors.email}</p>
+                        )}
                       </div>
 
                       <div>
@@ -675,15 +714,9 @@ const SOSSidePanel = () => {
                           Emergency Type *
                         </label>
                         <select
-                          required
                           value={sosForm.emergencyType}
-                          onChange={(e) =>
-                            setSosForm({
-                              ...sosForm,
-                              emergencyType: e.target.value,
-                            })
-                          }
-                          className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hw-primary/30 focus:border-hw-primary outline-none text-sm bg-white"
+                          onChange={(e) => setField("emergencyType", e.target.value)}
+                          className={`w-full px-3 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm bg-white ${errInputCls("emergencyType")}`}
                         >
                           <option value="">Select emergency type</option>
                           {emergencyTypes.map((t) => (
@@ -692,6 +725,9 @@ const SOSSidePanel = () => {
                             </option>
                           ))}
                         </select>
+                        {fieldErrors.emergencyType && (
+                          <p className="mt-1 text-xs text-red-500">{fieldErrors.emergencyType}</p>
+                        )}
                       </div>
 
                       <div>
@@ -700,12 +736,7 @@ const SOSSidePanel = () => {
                         </label>
                         <textarea
                           value={sosForm.description}
-                          onChange={(e) =>
-                            setSosForm({
-                              ...sosForm,
-                              description: e.target.value,
-                            })
-                          }
+                          onChange={(e) => setField("description", e.target.value)}
                           rows={3}
                           className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hw-primary/30 focus:border-hw-primary outline-none text-sm resize-none"
                           placeholder="Describe the emergency situation..."
@@ -722,13 +753,16 @@ const SOSSidePanel = () => {
                             min="1"
                             value={sosForm.numberOfPeople}
                             onChange={(e) =>
-                              setSosForm({
-                                ...sosForm,
-                                numberOfPeople: parseInt(e.target.value) || 1,
-                              })
+                              setField(
+                                "numberOfPeople",
+                                e.target.value === "" ? "" : parseInt(e.target.value) || 1,
+                              )
                             }
-                            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hw-primary/30 focus:border-hw-primary outline-none text-sm"
+                            className={`w-full px-3 py-2.5 border rounded-xl focus:ring-2 outline-none text-sm ${errInputCls("numberOfPeople")}`}
                           />
+                          {fieldErrors.numberOfPeople && (
+                            <p className="mt-1 text-xs text-red-500">{fieldErrors.numberOfPeople}</p>
+                          )}
                         </div>
                         <div>
                           <label className="block mb-1 text-sm font-medium text-gray-700">
@@ -737,12 +771,7 @@ const SOSSidePanel = () => {
                           <input
                             type="text"
                             value={sosForm.address}
-                            onChange={(e) =>
-                              setSosForm({
-                                ...sosForm,
-                                address: e.target.value,
-                              })
-                            }
+                            onChange={(e) => setField("address", e.target.value)}
                             className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hw-primary/30 focus:border-hw-primary outline-none text-sm"
                             placeholder="Location"
                           />
