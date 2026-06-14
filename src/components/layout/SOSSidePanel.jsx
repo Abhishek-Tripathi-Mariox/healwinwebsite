@@ -13,7 +13,31 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/lib/api";
+import { watchSosSubmission } from "@/lib/socket";
 import useSOSStore from "@/store/useSOSStore";
+
+// Map raw backend status → a friendly live step shown to the caller.
+const SOS_STEPS = [
+  { key: "RECEIVED", label: "Request received" },
+  { key: "IN_PROGRESS", label: "Team reviewing your emergency" },
+  { key: "DISPATCHED", label: "Ambulance dispatched" },
+  { key: "ACKNOWLEDGED", label: "Crew acknowledged" },
+  { key: "EN_ROUTE", label: "Ambulance on the way" },
+  { key: "ON_SCENE", label: "Ambulance arrived" },
+  { key: "ON_TRIP", label: "On the way to hospital" },
+  { key: "COMPLETED", label: "Completed" },
+];
+const STATUS_ALIASES = {
+  RESOLVED: "COMPLETED",
+  CLOSED: "COMPLETED",
+  ASSIGNED: "DISPATCHED",
+  ARRIVED: "ON_SCENE",
+};
+const normalizeStatus = (s) => STATUS_ALIASES[s] || s || "RECEIVED";
+const stepIndex = (s) => {
+  const i = SOS_STEPS.findIndex((x) => x.key === normalizeStatus(s));
+  return i < 0 ? 0 : i;
+};
 
 const SOSSidePanel = () => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -22,6 +46,10 @@ const SOSSidePanel = () => {
   const [success, setSuccess] = useState(null);
   const [error, setError] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
+  // Live SOS status (realtime via socket) after a form submission.
+  const [liveStatus, setLiveStatus] = useState(null);
+  const [liveEta, setLiveEta] = useState(null);
+  const sosWatchRef = useRef(null);
 
   // SOS countdown state
   const [countdown, setCountdown] = useState(5);
@@ -29,6 +57,16 @@ const SOSSidePanel = () => {
   const sosCancelledRef = useRef(false);
   const sosFiredRef = useRef(false); // Prevent duplicate SOS requests
   const locationRef = useRef(null); // Stable ref for location (avoids stale closures)
+
+  // Caller name/phone for the SOS Call (a browser can't read the device's
+  // number, so we ask for it). Mirrored to a ref so the dep-free fireSOS()
+
+  const [callerName, setCallerName] = useState("");
+  const [callerPhone, setCallerPhone] = useState("");
+  const callerRef = useRef({ name: "", phone: "" });
+  useEffect(() => {
+    callerRef.current = { name: callerName, phone: callerPhone };
+  }, [callerName, callerPhone]);
 
   // Get user location on mount (high accuracy GPS)
   useEffect(() => {
@@ -78,9 +116,19 @@ const SOSSidePanel = () => {
       address: "",
     });
     setFieldErrors({});
+    setCallerName("");
+    setCallerPhone("");
     setError(null);
     setSuccess(null);
+    // Stop watching live SOS status.
+    sosWatchRef.current?.();
+    sosWatchRef.current = null;
+    setLiveStatus(null);
+    setLiveEta(null);
   };
+
+  // Ensure the socket subscription is torn down if the component unmounts.
+  useEffect(() => () => sosWatchRef.current?.(), []);
 
   // Update a field + clear its inline error as the user types.
   const setField = (key, value) => {
@@ -155,6 +203,8 @@ const SOSSidePanel = () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          name: callerRef.current.name || undefined,
+          phone: callerRef.current.phone || undefined,
           latitude: loc?.lat,
           longitude: loc?.lng,
         }),
@@ -248,6 +298,8 @@ const SOSSidePanel = () => {
         // sendBeacon with text/plain to avoid CORS preflight
         const loc = locationRef.current;
         const payload = JSON.stringify({
+          name: callerRef.current.name || undefined,
+          phone: callerRef.current.phone || undefined,
           latitude: loc?.lat,
           longitude: loc?.lng,
         });
@@ -289,6 +341,17 @@ const SOSSidePanel = () => {
         setSuccess(
           "Emergency request submitted! Our team will respond immediately.",
         );
+        // Start watching this submission's live status in realtime.
+        const id = data.data?.id;
+        if (id) {
+          setLiveStatus("RECEIVED");
+          setLiveEta(null);
+          sosWatchRef.current?.();
+          sosWatchRef.current = watchSosSubmission(id, (payload) => {
+            if (payload?.status) setLiveStatus(payload.status);
+            if (payload?.etaMinutes != null) setLiveEta(payload.etaMinutes);
+          });
+        }
       } else {
         setError(data.message || "Failed to submit form");
       }
@@ -509,13 +572,31 @@ const SOSSidePanel = () => {
                   </div>
 
                   <div className="p-8 text-center">
-                    <h4 className="mb-6 text-2xl font-bold font-heading text-hw-text">
+                    <h4 className="mb-4 text-2xl font-bold font-heading text-hw-text">
                       You are triggering SOS
                     </h4>
-                    {/* <p className="mb-8 text-sm text-gray-500">
-                      This will trigger an emergency SOS call to 112. Only use
-                      this in a real emergency situation.
-                    </p> */}
+                    {/* So the dispatch team can call back — the browser can't
+                        read your number automatically. */}
+                    <div className="mb-5 space-y-3 text-left">
+                      <input
+                        type="text"
+                        value={callerName}
+                        onChange={(e) => setCallerName(e.target.value)}
+                        placeholder="Your name (optional)"
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hw-sos/30 focus:border-hw-sos outline-none text-sm"
+                      />
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        maxLength={10}
+                        value={callerPhone}
+                        onChange={(e) =>
+                          setCallerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))
+                        }
+                        placeholder="Your phone number (for callback)"
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-hw-sos/30 focus:border-hw-sos outline-none text-sm"
+                      />
+                    </div>
                     <div className="relative overflow-hidden rounded-2xl">
                       <button
                         onClick={startCountdown}
@@ -644,6 +725,57 @@ const SOSSidePanel = () => {
                       <p className="mt-2 text-sm text-gray-500">
                         Our emergency team has been notified.
                       </p>
+
+                      {/* Live status timeline (realtime via socket) */}
+                      {liveStatus && (
+                        <div className="mt-5 text-left">
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                              Live status
+                            </span>
+                            {liveEta != null && normalizeStatus(liveStatus) !== "COMPLETED" && (
+                              <span className="text-xs font-medium text-hw-primary">
+                                ETA ~{liveEta} min
+                              </span>
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            {SOS_STEPS.map((step, i) => {
+                              const cur = stepIndex(liveStatus);
+                              const done = i <= cur;
+                              const active = i === cur;
+                              return (
+                                <div key={step.key} className="flex items-center gap-3">
+                                  <div
+                                    className={`flex items-center justify-center w-5 h-5 rounded-full border ${
+                                      done
+                                        ? "bg-green-500 border-green-500"
+                                        : "bg-white border-gray-300"
+                                    }`}
+                                  >
+                                    {done && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+                                  </div>
+                                  <span
+                                    className={`text-sm ${
+                                      active
+                                        ? "font-semibold text-green-800"
+                                        : done
+                                        ? "text-gray-600"
+                                        : "text-gray-400"
+                                    }`}
+                                  >
+                                    {step.label}
+                                    {active && (
+                                      <Loader2 className="inline w-3.5 h-3.5 ml-2 animate-spin text-green-600" />
+                                    )}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       <button
                         onClick={closeModal}
                         className="mt-4 px-6 py-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-medium"
